@@ -39,20 +39,20 @@ while(True):
     _,t1 = cv2.threshold(t1,50,255,cv2.THRESH_BINARY)
 
     cnts = cv2.findContours(t1.copy(), cv2.RETR_EXTERNAL,
-	cv2.CHAIN_APPROX_SIMPLE)
+    cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if imutils.is_cv2() else cnts[1]
     cnts = contours.sort_contours(cnts)[0]
 
     print cnts
     # loop over the contours
     for (i, c) in enumerate(cnts):
-    	# draw the bright spot on the image
-    	(x, y, w, h) = cv2.boundingRect(c)
-    	((cX, cY), radius) = cv2.minEnclosingCircle(c)
-    	cv2.circle(t1, (int(cX), int(cY)), int(radius),
-    		(0, 0, 255), 3)
-    	cv2.putText(t1, "#{}".format(i + 1), (x, y - 15),
-    		cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
+        # draw the bright spot on the image
+        (x, y, w, h) = cv2.boundingRect(c)
+        ((cX, cY), radius) = cv2.minEnclosingCircle(c)
+        cv2.circle(t1, (int(cX), int(cY)), int(radius),
+            (0, 0, 255), 3)
+        cv2.putText(t1, "#{}".format(i + 1), (x, y - 15),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
 
         play(440 + x, 0.1)
 
