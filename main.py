@@ -11,38 +11,26 @@ import sys
 
 note_being_played = None
 
-notes = {
-    # A
-    "0": 440,
-    # B flat
-    "1": 366.16,
-    # B
-    "2": 493.88,
-    # C
-    "3": 523.25,
-    # C#
-    "4": 554.37,
-    # D
-    "5": 587.33,
-    # D#
-    "6": 622.25,
-    # E
-    "7": 659.25,
-    # F
-    "8": 698.46,
-    # F#
-    "9": 739.99,
-    # G
-    "10": 783.99,
-    # G#
-    "11": 830.61
-}
+notes = [
+    [440, "A"],
+    # [366.16, "A#"],
+    [493.88, "B"],
+    [523.25, "C"],
+    # [554.37, "C#"],
+    [587.33,"D"],
+    # [622.25, "D#"],
+    [659.25, "E"],
+    [698.46, "F"],
+    # [739.99, "F#"],
+    [783.99, "G"],
+    # [830.61, "G#"]
+]
 
-def play(freq, t = 0.5):
+def play(freq, t = 0.01):
     print str(freq) + " " + str(t)
     global note_being_played
     n = audiogen.sampler.play(audiogen.tone(freq), blocking=False)
-    time.sleep(0.01)
+    time.sleep(0.1)
     if note_being_played is not None:
         note_being_played.close()
     time.sleep(t)
@@ -64,8 +52,12 @@ args = vars(ap.parse_args())
 # define the lower and upper boundaries of the "green"
 # ball in the HSV color space, then initialize the
 # list of tracked points
-greenLower = (130, 110, 120)
-greenUpper = (200, 160, 190)
+
+#greenLower = (150, 150, 180)
+#greenUpper = (255, 220, 230)
+greenLower = (130, 120, 120)
+greenUpper = (210, 200, 200)
+
 pts = deque(maxlen=args["buffer"])
 
 # if a video path was not supplied, grab the reference
@@ -129,30 +121,32 @@ while True:
     pts.appendleft(center)
 
     # loop over the set of tracked points
-    for i in xrange(1, len(pts)):
+    # for i in xrange(1, len(pts)):
         # if either of the tracked points are None, ignore
         # them
-        if pts[i - 1] is None or pts[i] is None:
-            continue
+        # if pts[i - 1] is None or pts[i] is None:
+            # continue
 
         # otherwise, compute the thickness of the line and
         # draw the connecting lines
-        thickness = int(np.sqrt(args["buffer"] / float(i + 1)) * 2.5)
-        cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
+        # thickness = int(np.sqrt(args["buffer"] / float(i + 1)) * 2.5)
+        # cv2.line(frame, pts[i - 1], pts[i], (0, 0, 255), thickness)
 
     # show the frame to our screen
     #cv2.imshow("Frame", hsv)
-    cv2.imshow("Frame", frame)
 
     if pts[0] is not None:
         # print(len(pts))
         print(pts[0][0])
         x = width - pts[0][0]
-        note = notes[str(int((x / float(width)) * 12.0))]
+        note = notes[int((x / float(width)) * (len(notes) * 1.0))]
         print(note)
-        play(note)
+        cv2.putText(frame, note[1], (50,width // 2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0,255,255), 4)
+        play(note[0])
     else:
         close()
+
+    cv2.imshow("Frame", frame)
 
     key = cv2.waitKey(1) & 0xFF
 
