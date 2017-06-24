@@ -53,10 +53,10 @@ args = vars(ap.parse_args())
 # ball in the HSV color space, then initialize the
 # list of tracked points
 
-#greenLower = (150, 150, 180)
-#greenUpper = (255, 220, 230)
-greenLower = (130, 120, 120)
-greenUpper = (210, 200, 200)
+#lower = (150, 150, 180)
+#upper = (255, 220, 230)
+lower = (0, 170, 0)
+upper = (200, 255, 120)
 
 pts = deque(maxlen=args["buffer"])
 
@@ -82,15 +82,17 @@ while True:
     # resize the frame, blur it, and convert it to the HSV
     # color space
     width = 600
+    frame = np.fliplr(frame)
     # frame.shape[:2][1]
     frame = imutils.resize(frame, width=width)
+    #frame = np.fliplr(frame)
     # blurred = cv2.GaussianBlur(frame, (11, 11), 0)
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     # construct a mask for the color "green", then perform
     # a series of dilations and erosions to remove any small
     # blobs left in the mask
-    mask = cv2.inRange(hsv, greenLower, greenUpper)
+    mask = cv2.inRange(hsv, lower, upper)
     mask = cv2.erode(mask, None, iterations=2)
     mask = cv2.dilate(mask, None, iterations=2)
     # find contours in the mask and initialize the current
@@ -141,7 +143,7 @@ while True:
         x = width - pts[0][0]
         note = notes[int((x / float(width)) * (len(notes) * 1.0))]
         print(note)
-        cv2.putText(frame, note[1], (50,width // 2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0,255,255), 4)
+        cv2.putText(frame, note[1], (50, width // 2), cv2.FONT_HERSHEY_SIMPLEX, 4, (0,255,255), 4)
         play(note[0])
     else:
         close()
