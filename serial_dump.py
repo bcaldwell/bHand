@@ -70,13 +70,16 @@ file_name = sys.argv[1]
 
 if os.path.isfile(file_name):
     print("File already exists")
-    file_name = f"{file_name} {int(time.time())}"
+    file_name = f"{file_name} {time.time()}"
 
 print (file_name)
 
 f = open(file_name, 'w')
 
+t = time.time()
+
 while True:
     data = readline()
-    data = f"{time.time()} {data}\n"
+    data = f"{time.time() - t} {data}\n"
+    # print(data)
     f.write(data)
