@@ -25,9 +25,12 @@ MPU6050 mpu;
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
 
 
-const int HISTORY_LENGTH = 150;
+const int HISTORY_LENGTH = 100;
 
-const int WOBBLE_THRESHOLD = 70;
+const int INDEX_FINGER = 4;
+const int MIDDLE_FINGER = 3;
+
+const int WOBBLE_THRESHOLD = 35;
 const int WOBBLE_COUNT = 50;
 
 const int VOLUME_THRESHOLD = 5000;
@@ -36,13 +39,12 @@ const int VOLUME_COUNT = 30;
 const int VOLUME_DECREASE_THRESHOLD = -2000;
 const int VOLUME_DECREASE_COUNT = 10;
 
-int AX_HIST [HISTORY_LENGTH];
-int AY_HIST [HISTORY_LENGTH];
-int AZ_HIST [HISTORY_LENGTH];
+const double GRAVITY_FACTOR = 9.2; // SHOULD BE 9.8
+const double HORIZONTAL_FACTOR = 4.5; // SHOULD BE 0
+const double OUT_FACTOR = 2; // SHOULD BE 0;
 
-int GX_HIST [HISTORY_LENGTH];
-int GY_HIST [HISTORY_LENGTH];
-int GZ_HIST [HISTORY_LENGTH];
+const double ACCEL_Z_RESET_COUNT = HISTORY_LENGTH - 5;
+
 int FilledSpot = 0;
 
 float TEMPO = 700;
@@ -53,168 +55,183 @@ bool isNotePlaying = false;
 int channel = 1; // Defines the MIDI channel to send messages on (values from 1-16)
 int velocity = 50; // Defines the velocity that the note plays at (values from 0-127)
 
-int32_t notes_to_play [][2] ={
-  {48, 1},
-  {48, 1},
-  {55, 1},
-  {55, 1},
-  {57, 1},
-  {57, 1},
-  {55, 2},
-  {53, 1},
-  {53, 1},
-  {52, 1},
-  {52, 1},
-  {50, 1},
-  {50, 1},
-  {48, 2},
-
-  {55, 1},
-  {55, 1},
-  {53, 1},
-  {53, 1},
-  {52, 1},
-  {52, 1},
-  {50, 2},
-
-  {55, 1},
-  {55, 1},
-  {53, 1},
-  {53, 1},
-  {52, 1},
-  {52, 1},
-  {50, 2},
-
-  {48, 1},
-  {48, 1},
-  {55, 1},
-  {55, 1},
-  {57, 1},
-  {57, 1},
-  {55, 2},
-  {53, 1},
-  {53, 1},
-  {52, 1},
-  {52, 1},
-  {50, 1},
-  {50, 1},
-  {48, 2},
-  {0, 10},
-};
-
 int32_t current_note [2];
 int current_note_spot = 0;
 
-
-struct TrapezoidRule {
-  double value;
-  double last_y;
-  double last_x;
-  double zero;
-};
-
-
 struct YawPitchRoll ypr;
+struct Acceleration accel;
+struct TrapezoidRule velocity_z;
+struct TrapezoidRule position_z;
 
-struct TrapezoidRule velocity_x = {0,0,millis(), 1300};
-struct TrapezoidRule position_x  = {0,0,millis(), 0};
+struct TrapezoidRule velocity_x;
+struct TrapezoidRule position_x;
+
+struct TrapezoidRule velocity_y;
+struct TrapezoidRule position_y;
 
 // ================================================================
 // ===                      INITIAL SETUP                       ===
 // ================================================================
 
 void setup() {
-  // initialize serial communication
-  Serial.begin(115200);
-
   mpu_init(mpu, INTERRUPT_PIN);
+  cap_init();
+
+  Serial.println("Waiting...");
+  // first data points are incorrect and need to clear buffer
+  while (millis() < 6500) {
+    mpu_setup();
+    getYawPitchRoll(&ypr);
+    getLinearAccel(&accel);
+  }
+
+  Serial.println("Done");
+  velocity_z = {0,0,millis(), GRAVITY_FACTOR};
+  position_z  = {0,0,millis(), 0};
+
+  velocity_y = {0,0,millis(), OUT_FACTOR};
+  position_y  = {0,0,millis(), 0};
+
+  velocity_x = {0,0,millis(), HORIZONTAL_FACTOR};
+  position_x  = {0,0,millis(), 0};
 }
-
-
-
 
 
 // ================================================================
 // ===                    MAIN PROGRAM LOOP                     ===
 // ================================================================
-
-void addGyro (YawPitchRoll ypr) {
-  
+int accelSpot = 0;
+void printArray (double array []) {
+  Serial.println("Print Array");
+  for (int i=0;i < HISTORY_LENGTH;i++) {
+    Serial.printf(" %f",array[i]);
+  }
+  Serial.println("\n");
+}
+/*
+  axis = 0 for x-axis
+  axis = 1 for y-axis
+  axis = 2 for z-axis
+*/
+bool detectRotation (YawPitchRoll ypr, double threshold, int axis = 1, double baseline = 0) {
+  bool flag = false;
+  if (axis == 0) {
+    if (ypr.roll - baseline > threshold) flag = true;
+  } else if (axis == 1 ) {
+    if (ypr.pitch - baseline > threshold) flag = true;
+  } else if (axis == 2) {
+    if (ypr.yaw - baseline > threshold) flag = true;
+  } else {
+    Serial.println("You fucked up");
+  }
+  return flag;
+}
+double calculateRotationMagnitude (YawPitchRoll ypr, int axis = 1, double baseline = 0, double max = 10, double min = 0) {
+  double magnitude = 0;
+  if (axis == 0) {
+    magnitude =  (max-min)/2 + (max-min)/2*(ypr.roll-baseline)/180; // ensures max of baseline set to -90
+  } else if (axis == 1 ) {
+    magnitude =  (max-min)/2 + ((max-min)/2)*(ypr.pitch-baseline)/180; // ensures max of baseline set to -90
+  } else if (axis == 2) {
+    magnitude =  (max-min)/2 + (max-min)/2*(ypr.yaw-baseline)/180; // ensures max of baseline set to -90
+  } else {
+    Serial.println("You fucked up");
+  }
+  return magnitude;
 }
 
-void add (int16_t ax, int16_t ay, int16_t az, int16_t gx, int16_t gy, int16_t gz) {
-  AX_HIST[FilledSpot] = ax;
-  AY_HIST[FilledSpot] = ay;
-  AZ_HIST[FilledSpot] = az;
-  GX_HIST[FilledSpot] = gx;
-  GY_HIST[FilledSpot] = gy;
-  GZ_HIST[FilledSpot] = gz;
-//  Serial.println("Start");
-//  Serial.println(sizeof(GZ_HIST));
-//  Serial.println(sizeof(GZ_HIST[0]));
-//  Serial.println(sizeof(ax));
-//  Serial.println("End");
-  FilledSpot++;
-
-  if (FilledSpot == HISTORY_LENGTH) {
-    FilledSpot = 0;
-  }
-}
-
-
-// comparator value is to determine if the threshold should be less than the value or greater than the magnitude or less than magnitude
-bool DetectThreshold (int * data, int magnitude, int count_requirement, bool comparator = true) {
-  int count = 0;
-  //int len = sizeof(data)/sizeof(data[0]); //takes length of pointer instead of array
-  int len = HISTORY_LENGTH;
-  for (int i = 0; i < len; i++ ) {
-    if (data[i] > magnitude && comparator) {
-      count++;
-    }
-    else if (data[i] < magnitude && !comparator) {
-      count++;
-    }
-  }
-
-  if (count > (count_requirement-1)) {
-    return true;
-  }
-  return false;
-}
-
-float value;
+bool tryFindAction = false;
 
 void loop() {
+  cap_read();
 
   if(!mpu_setup()) return;
 
-
   getYawPitchRoll(&ypr);
-  printYawPitchRoll(ypr);
-  //HERE
-  //doubleTrapExecution();
+  //printYawPitchRoll(ypr);
 
-  play_note();
+  getLinearAccel(&accel);
+  //getWorldAccel(&accel); // want to try with WorldAccel
+  printAccel(accel);
 
-  // mpu.dmpGetQuaternion(&q, fifoBuffer);
-  // mpu.dmpGetAccel(&aa, fifoBuffer);
-  // mpu.dmpGetGravity(&gravity, &q);
-  // mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-  // mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-  // Serial.printf("a-z: %d \n", aaReal.z);
-  // add(aaReal.x,aaReal.y,aaReal.z,ypr[0],ypr[1],ypr[2]);
-  // Serial.printf("g-z: %d \n", ypr[1]);
+  doubleTrapExecution(accel.z, &velocity_z, &position_z);
+  doubleTrapExecution(accel.x, &velocity_x, &position_x);
+  doubleTrapExecution(accel.y, &velocity_y, &position_y);
 
-  if (DetectThreshold(GY_HIST,WOBBLE_THRESHOLD,WOBBLE_COUNT)) {
-    enactWarble();
-  } else {
-    usbMIDI.sendPitchBend(8192, channel);
+  printPositions(position_x, position_y, position_z);
+
+  double percentVertical = amountVertical(position_z.value);
+  double percentHorizontal = amountHorizontal(position_x.value);
+  double percentOut = amountOut(position_y.value);
+
+  if ((percentVertical > 0.4 || percentVertical < -0.4) && tryFindAction) {
+    #if DEBUG
+    printPositions(position_x, position_y, position_z);
+    #endif
+    if (percentVertical > 0) {
+      Serial.println("Arm Raised");
+    } else {
+      Serial.println("Arm Lowered");
+    }
+    Serial.printf("Percents: Vertical: %f \t Horizontal: %f \t Out: %f \n\n", percentVertical, percentHorizontal, percentOut);
+    tryFindAction = false;
   }
-  if (DetectThreshold(AZ_HIST,VOLUME_THRESHOLD,VOLUME_COUNT)) {
-    enactVolumeIncrease();
+  if ((percentHorizontal > 0.4 || percentHorizontal < -0.4) && tryFindAction) {
+    #if DEBUG
+    printPositions(position_x, position_y, position_z);
+    #endif
+    if (percentHorizontal > 0) {
+      Serial.printf("Arm Left");
+    } else {
+      Serial.println("Arm Right");
+    }
+    Serial.printf("Percents: Vertical: %f \t Horizontal: %f \t Out: %f \n\n", percentVertical, percentHorizontal, percentOut);
+    tryFindAction = false;
   }
-  if (DetectThreshold(AZ_HIST,VOLUME_DECREASE_THRESHOLD,VOLUME_DECREASE_COUNT,false)) {
-    enactVolumeDecrease();
+  // if ((percentOut > 0.4 || percentOut < -0.4)&& tryFindAction) {
+  //   if (percentOut > 0) {
+  //     Serial.println("Arm Out");
+  //   } else {
+  //     Serial.println("Arm In");
+  //   }
+  //   Serial.printf("Percents: Vertical: %f \t Horizontal: %f \t Out: %f \n\n", percentVertical, percentHorizontal, percentOut);
+  //   tryFindAction = false;
+  // }
+  if (cap_turned_on(MIDDLE_FINGER) || cap_turned_on(INDEX_FINGER)) {
+      //print_status();
+      tryFindAction = true;
+      Serial.println("Reseting Position\n");
+      clearPositionAndVelocity(&position_z, &velocity_z);
+      clearPositionAndVelocity(&position_x, &velocity_x);
+      clearPositionAndVelocity(&position_y, &velocity_y);
+  }
+  if (cap_turned_off(MIDDLE_FINGER) || cap_turned_off(INDEX_FINGER)) {
+      tryFindAction = false;
+      //print_status();
+      //Serial.println("Finger Released \n");
+
+  }
+
+  delay(1); // may be bad
+
+  double rotationMagnitude;
+  // rotation about Y axis
+  if (detectRotation(ypr, WOBBLE_THRESHOLD, 1,0 )) {
+      //Serial.println("Y-Axis Rotation Detected");
+      rotationMagnitude = calculateRotationMagnitude(ypr,1,0);
+      //Serial.println(magnitude);
+  }
+  // rotation about X-Axis
+  if (detectRotation(ypr, WOBBLE_THRESHOLD, 0,0 )) {
+      //Serial.println("X-Axis Rotation Detected");
+      rotationMagnitude = calculateRotationMagnitude(ypr,0,0);
+      //Serial.println(magnitude);
+  }
+  // rotation about Z-Axis
+  if (detectRotation(ypr, WOBBLE_THRESHOLD, 2,0 )) {
+      //Serial.println("Z-Axis Rotation Detected");
+      rotationMagnitude = calculateRotationMagnitude(ypr,2,0);
+      //Serial.println(magnitude);
   }
 }
