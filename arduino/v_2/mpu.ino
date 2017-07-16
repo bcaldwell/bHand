@@ -188,6 +188,9 @@ void clearPositionAndVelocity (TrapezoidRule * position, TrapezoidRule * velocit
 
 }
 
+
+
+
 void getWorldAccel(Acceleration * accel){
 
   accel -> x = 0;

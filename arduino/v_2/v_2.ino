@@ -24,9 +24,6 @@ MPU6050 mpu;
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
 
-
-const int HISTORY_LENGTH = 100;
-
 const int INDEX_FINGER = 4;
 const int MIDDLE_FINGER = 3;
 
@@ -44,8 +41,6 @@ const double HORIZONTAL_FACTOR = 4.5; // SHOULD BE 0
 const double OUT_FACTOR = 2; // SHOULD BE 0;
 
 const double ACCEL_Z_RESET_COUNT = HISTORY_LENGTH - 5;
-
-int FilledSpot = 0;
 
 float TEMPO = 700;
 float noteStartTime;
@@ -140,6 +135,49 @@ double calculateRotationMagnitude (YawPitchRoll ypr, int axis = 1, double baseli
   return magnitude;
 }
 
+
+int FilledSpot = 0;
+
+double AX_HIST[HISTORY_LENGTH];
+double AY_HIST[HISTORY_LENGTH];
+double AZ_HIST[HISTORY_LENGTH];
+
+void addAccel (double ax, double ay, double az) {
+  AX_HIST[FilledSpot] = ax;
+  AY_HIST[FilledSpot] = ay;
+  AZ_HIST[FilledSpot] = az;
+
+  FilledSpot++;
+  if (FilledSpot == HISTORY_LENGTH) {
+    FilledSpot = 0;
+  }
+}
+
+void clearArray (double * data) {
+  for (int i = 0; i < HISTORY_LENGTH; i++) {
+    data[i] = 0;
+  }
+}
+
+bool DetectThreshold (double * data, double magnitude, int count_requirement, bool comparator = true) {
+  int count = 0;
+  //int len = sizeof(data)/sizeof(data[0]); //takes length of pointer instead of array
+  int len = HISTORY_LENGTH;
+  for (int i = 0; i < len; i++ ) {
+    if (data[i] > magnitude && comparator) {
+      count++;
+    }
+    else if (data[i] < magnitude && !comparator) {
+      count++;
+    }
+
+    if (count > (count_requirement-1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool tryFindAction = false;
 
 void loop() {
@@ -147,13 +185,70 @@ void loop() {
 
   if(!mpu_setup()) return;
 
-  getYawPitchRoll(&ypr);
+  //getYawPitchRoll(&ypr);
   //printYawPitchRoll(ypr);
 
   getLinearAccel(&accel);
-  //getWorldAccel(&accel); // want to try with WorldAccel
-  printAccel(accel);
 
+  addAccel(accel.x, accel.y, accel.z);
+  //getWorldAccel(&accel); // want to try with WorldAccel
+  // printAccel(accel);
+
+  if (cap_turned_on(MIDDLE_FINGER) || cap_turned_on(INDEX_FINGER)) {
+      //print_status();
+      tryFindAction = true;
+      Serial.println("Reseting Position\n");
+      clearArray(AZ_HIST);
+      clearArray(AX_HIST);
+  }
+  if (cap_turned_off(MIDDLE_FINGER) || cap_turned_off(INDEX_FINGER)) {
+      tryFindAction = false;
+  }
+
+  if (!tryFindAction) return;
+
+  if (DetectThreshold(AZ_HIST, AZ_THRESHOLD_UP, AZ_COUNT, true)) {
+    Serial.println("Moved Up!");
+    tryFindAction = false;
+    printAccel(accel);
+    turnOnChannel(CC_HIGH_PASS,FILTER_ON, MAIN_CHANNEL);
+
+  }
+  if (DetectThreshold(AZ_HIST, AZ_THRESHOLD_DOWN, AZ_COUNT, false)) {
+    Serial.println("Moved DOWN!");
+    tryFindAction = false;
+    printAccel(accel);
+    turnOffChannel(CC_HIGH_PASS,FILTER_OFF, MAIN_CHANNEL);
+
+
+  }
+  if (DetectThreshold(AX_HIST, AX_THRESHOLD_RIGHT, AX_COUNT, true)) {
+    Serial.println("Moved left!");
+    tryFindAction = false;
+    printAccel(accel);
+    turnOnChannel(CC_LOW_PASS,FILTER_ON, MAIN_CHANNEL);
+
+
+  }
+  if (DetectThreshold(AX_HIST, AX_THRESHOLD_LEFT, AX_COUNT, false)) {
+    Serial.println("Moved right!");
+    tryFindAction = false;
+    printAccel(accel);
+    turnOffChannel(CC_LOW_PASS,FILTER_OFF, MAIN_CHANNEL);
+
+
+  }
+  return;
+
+  if (accel.x > 60 || accel.x < -60) {
+    Serial.println("Move in X-Position / Horizontal Plane");
+  }
+  if (accel.y > 60 || accel.y < -60) {
+    Serial.println("Move in Y-Position / IN and OUT Plane");
+  }
+  if (accel.z > 60 || accel.z < -60) {
+    Serial.println("Move in Z-Position / Vertical Plane");
+  }
 
   doubleTrapExecution(accel.z, &velocity_z, &position_z);
   doubleTrapExecution(accel.x, &velocity_x, &position_x);

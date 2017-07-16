@@ -17,6 +17,16 @@
 // }
 
 
+void turnOnChannel (int CC,int value, int channel) {
+  usbMIDI.sendControlChange(CC,value,channel);
+}
+
+void turnOffChannel (int CC,int value, int channel) {
+  usbMIDI.sendControlChange(CC,value,channel);
+}
+
+
+
 void enactVolumeIncrease() {
   Serial.println("Volume Increase");
   if (random(0,20) > 15) {
