@@ -16,57 +16,58 @@
 //   usbMIDI.sendControlChange(CC,magnitude,channel);
 // }
 
+QueueArray <MidiControl> TimerQueue;
+QueueArray <MidiControl> TouchQueue;
 
-void turnOnChannel (int CC,int value, int channel) {
-  usbMIDI.sendControlChange(CC,value,channel);
-}
+MidiControl currentEffect;
+MidiControl currentTimer;
+MidiControl currentTouch;
 
-void turnOffChannel (int CC,int value, int channel) {
-  usbMIDI.sendControlChange(CC,value,channel);
-}
-
-
-
-void enactVolumeIncrease() {
-  Serial.println("Volume Increase");
-  if (random(0,20) > 15) {
-    velocity += 1;
-    velocity = min(velocity, 127);
+void turnOnEffect (int finger, int direction) {
+  currentEffect = Mapping[finger][direction];
+  if (finger == INDEX_FINGER || finger == MIDDLE_FINGER) {
+    TurnOnTimerEffect(&currentEffect);
+  } else {
+    TurnOnTouchEffect(currentEffect);
   }
 }
 
-// void play_note()
-// {
-//   //Serial.println(velocity);
-//   usbMIDI.sendNoteOn(current_note[0],velocity,channel); // Turn the note ON
-//
-//   if (!isNotePlaying) {
-//       //Serial.println(velocity);
-//       usbMIDI.sendNoteOn(current_note[0],velocity,channel); // Turn the note ON
-//       noteStartTime = millis();
-//       isNotePlaying = true;
-//   }
-//   else if (millis() - noteStartTime > TEMPO * current_note[1]) {
-//       usbMIDI.sendNoteOff(current_note[0],0,channel); // Turn the note OFF - don't forget to do this ;)
-//       isNotePlaying = false;
-//       current_note_spot++;
-//       current_note[0] = notes_to_play[current_note_spot][0]; // hacky but c doesn't like equating array sections (odd I know. I thought pointers would be fine!)
-//       current_note[1] = notes_to_play[current_note_spot][1];
-//       usbMIDI.sendPitchBend(8192, channel);
-//   }
-// }
-
-double value;
-void enactWarble() {
-  value = sin((millis() - noteStartTime)/250.0 * 2.0 * PI);
-  usbMIDI.sendPitchBend(8192 + (value * 4000), channel);
-  Serial.println("Wobble enacted 5");
+void TurnOnTimerEffect(MidiControl * effect) {
+  toggleEffect(effect);
+  effect -> off_time = millis() + 5000;
+  TimerQueue.enqueue(*effect);
 }
 
-void enactVolumeDecrease() {
-  Serial.println("Volume Decrease");
-  if (random(0,20) > 15) {
-    velocity -= 1;
-    velocity = min(velocity, 0);
+void TurnOnTouchEffect(MidiControl effect) {
+  toggleEffect(&effect);
+  TouchQueue.enqueue(effect);
+}
+
+void toggleEffect(MidiControl * effect) {
+  int value;
+  if (effect -> is_on) {
+    value = effect -> on;
+    effect -> is_on = true;
+  } else {
+    value = effect -> off;
+    effect -> is_on = false;
+  }
+
+  usbMIDI.sendControlChange(effect -> control_change,value,effect -> channel);
+}
+
+void clearTouchEffect() {
+  if (TouchQueue.isEmpty()) return;
+  currentTouch = TouchQueue.dequeue();
+  toggleEffect(&currentTouch);
+}
+
+void clearTimerEffects() {
+  unsigned long cur_time = millis();
+  while (!TimerQueue.isEmpty()) {
+    currentTimer = TimerQueue.front();
+    if (currentTimer.off_time < cur_time) break;
+    toggleEffect(&currentTimer);
+    TimerQueue.dequeue();
   }
 }

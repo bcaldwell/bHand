@@ -61,6 +61,7 @@ struct MidiControl {
   int control_change;
   int on;
   int off;
+  // int length;
 
   bool is_on;
 

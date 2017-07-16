@@ -1,3 +1,5 @@
+#include <QueueArray.h>
+
 // I2Cdev and MPU6050 must be installed as libraries, or else the .cpp/.h files
 // for both classes must be in the include path of your project
 #include "I2Cdev.h"
@@ -24,8 +26,12 @@ MPU6050 mpu;
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
 
-const int INDEX_FINGER = 4;
-const int MIDDLE_FINGER = 3;
+const int INDEX_FINGER = 0;
+const int MIDDLE_FINGER = 1;
+const int RING_FINGER = 2;
+const int PINKY_FINGER = 3;
+
+const int SIDE_FINGER = 4;
 
 const int WOBBLE_THRESHOLD = 35;
 const int WOBBLE_COUNT = 50;
@@ -103,38 +109,6 @@ void printArray (double array []) {
   }
   Serial.println("\n");
 }
-/*
-  axis = 0 for x-axis
-  axis = 1 for y-axis
-  axis = 2 for z-axis
-*/
-bool detectRotation (YawPitchRoll ypr, double threshold, int axis = 1, double baseline = 0) {
-  bool flag = false;
-  if (axis == 0) {
-    if (ypr.roll - baseline > threshold) flag = true;
-  } else if (axis == 1 ) {
-    if (ypr.pitch - baseline > threshold) flag = true;
-  } else if (axis == 2) {
-    if (ypr.yaw - baseline > threshold) flag = true;
-  } else {
-    Serial.println("You fucked up");
-  }
-  return flag;
-}
-double calculateRotationMagnitude (YawPitchRoll ypr, int axis = 1, double baseline = 0, double max = 10, double min = 0) {
-  double magnitude = 0;
-  if (axis == 0) {
-    magnitude =  (max-min)/2 + (max-min)/2*(ypr.roll-baseline)/180; // ensures max of baseline set to -90
-  } else if (axis == 1 ) {
-    magnitude =  (max-min)/2 + ((max-min)/2)*(ypr.pitch-baseline)/180; // ensures max of baseline set to -90
-  } else if (axis == 2) {
-    magnitude =  (max-min)/2 + (max-min)/2*(ypr.yaw-baseline)/180; // ensures max of baseline set to -90
-  } else {
-    Serial.println("You fucked up");
-  }
-  return magnitude;
-}
-
 
 int FilledSpot = 0;
 
@@ -178,7 +152,31 @@ bool DetectThreshold (double * data, double magnitude, int count_requirement, bo
   return false;
 }
 
+bool any_cap_turned_on(int *finger) {
+  if (cap_turned_on(INDEX_FINGER)) {
+    *finger = INDEX_FINGER;
+    return true;
+  }
+  if (cap_turned_on(MIDDLE_FINGER)) {
+    *finger = INDEX_FINGER;
+    return true;
+  }
+  if (cap_turned_on(RING_FINGER)) {
+    *finger = RING_FINGER;
+    return true;
+  }
+  if (cap_turned_on(PINKY_FINGER)) {
+    *finger = PINKY_FINGER;
+    return true;
+  }
+}
+
+bool any_cap_turned_off(){
+  return cap_turned_off(MIDDLE_FINGER) || cap_turned_off(INDEX_FINGER) || cap_turned_off(RING_FINGER) || cap_turned_off(PINKY_FINGER);
+}
+
 bool tryFindAction = false;
+int active_finger;
 
 void loop() {
   cap_read();
@@ -194,14 +192,14 @@ void loop() {
   //getWorldAccel(&accel); // want to try with WorldAccel
   // printAccel(accel);
 
-  if (cap_turned_on(MIDDLE_FINGER) || cap_turned_on(INDEX_FINGER)) {
+  if (any_cap_turned_on(&active_finger)) {
       //print_status();
       tryFindAction = true;
       Serial.println("Reseting Position\n");
       clearArray(AZ_HIST);
       clearArray(AX_HIST);
   }
-  if (cap_turned_off(MIDDLE_FINGER) || cap_turned_off(INDEX_FINGER)) {
+  if (any_cap_turned_off()) {
       tryFindAction = false;
   }
 
@@ -211,122 +209,25 @@ void loop() {
     Serial.println("Moved Up!");
     tryFindAction = false;
     printAccel(accel);
-    turnOnChannel(CC_HIGH_PASS,FILTER_ON, MAIN_CHANNEL);
-
-  }
-  if (DetectThreshold(AZ_HIST, AZ_THRESHOLD_DOWN, AZ_COUNT, false)) {
+    turnOnEffect(active_finger, 0);
+  } else if (DetectThreshold(AZ_HIST, AZ_THRESHOLD_DOWN, AZ_COUNT, false)) {
     Serial.println("Moved DOWN!");
     tryFindAction = false;
     printAccel(accel);
-    turnOffChannel(CC_HIGH_PASS,FILTER_OFF, MAIN_CHANNEL);
-
-
-  }
-  if (DetectThreshold(AX_HIST, AX_THRESHOLD_RIGHT, AX_COUNT, true)) {
+    turnOnEffect(active_finger, 2);
+  } else if (DetectThreshold(AX_HIST, AX_THRESHOLD_RIGHT, AX_COUNT, true)) {
     Serial.println("Moved left!");
     tryFindAction = false;
     printAccel(accel);
-    turnOnChannel(CC_LOW_PASS,FILTER_ON, MAIN_CHANNEL);
-
-
-  }
-  if (DetectThreshold(AX_HIST, AX_THRESHOLD_LEFT, AX_COUNT, false)) {
+    turnOnEffect(active_finger, 1);
+  } else if (DetectThreshold(AX_HIST, AX_THRESHOLD_LEFT, AX_COUNT, false)) {
     Serial.println("Moved right!");
     tryFindAction = false;
     printAccel(accel);
-    turnOffChannel(CC_LOW_PASS,FILTER_OFF, MAIN_CHANNEL);
-
-
-  }
-  return;
-
-  if (accel.x > 60 || accel.x < -60) {
-    Serial.println("Move in X-Position / Horizontal Plane");
-  }
-  if (accel.y > 60 || accel.y < -60) {
-    Serial.println("Move in Y-Position / IN and OUT Plane");
-  }
-  if (accel.z > 60 || accel.z < -60) {
-    Serial.println("Move in Z-Position / Vertical Plane");
+    turnOnEffect(active_finger, 3);
   }
 
-  doubleTrapExecution(accel.z, &velocity_z, &position_z);
-  doubleTrapExecution(accel.x, &velocity_x, &position_x);
-  doubleTrapExecution(accel.y, &velocity_y, &position_y);
+  if (cap_turned_on(SIDE_FINGER)) clearTouchEffect();
 
-  printPositions(position_x, position_y, position_z);
-
-  double percentVertical = amountVertical(position_z.value);
-  double percentHorizontal = amountHorizontal(position_x.value);
-  double percentOut = amountOut(position_y.value);
-
-  if ((percentVertical > 0.4 || percentVertical < -0.4) && tryFindAction) {
-    #if DEBUG
-    printPositions(position_x, position_y, position_z);
-    #endif
-    if (percentVertical > 0) {
-      Serial.println("Arm Raised");
-    } else {
-      Serial.println("Arm Lowered");
-    }
-    Serial.printf("Percents: Vertical: %f \t Horizontal: %f \t Out: %f \n\n", percentVertical, percentHorizontal, percentOut);
-    tryFindAction = false;
-  }
-  if ((percentHorizontal > 0.4 || percentHorizontal < -0.4) && tryFindAction) {
-    #if DEBUG
-    printPositions(position_x, position_y, position_z);
-    #endif
-    if (percentHorizontal > 0) {
-      Serial.printf("Arm Left");
-    } else {
-      Serial.println("Arm Right");
-    }
-    Serial.printf("Percents: Vertical: %f \t Horizontal: %f \t Out: %f \n\n", percentVertical, percentHorizontal, percentOut);
-    tryFindAction = false;
-  }
-  // if ((percentOut > 0.4 || percentOut < -0.4)&& tryFindAction) {
-  //   if (percentOut > 0) {
-  //     Serial.println("Arm Out");
-  //   } else {
-  //     Serial.println("Arm In");
-  //   }
-  //   Serial.printf("Percents: Vertical: %f \t Horizontal: %f \t Out: %f \n\n", percentVertical, percentHorizontal, percentOut);
-  //   tryFindAction = false;
-  // }
-  if (cap_turned_on(MIDDLE_FINGER) || cap_turned_on(INDEX_FINGER)) {
-      //print_status();
-      tryFindAction = true;
-      Serial.println("Reseting Position\n");
-      clearPositionAndVelocity(&position_z, &velocity_z);
-      clearPositionAndVelocity(&position_x, &velocity_x);
-      clearPositionAndVelocity(&position_y, &velocity_y);
-  }
-  if (cap_turned_off(MIDDLE_FINGER) || cap_turned_off(INDEX_FINGER)) {
-      tryFindAction = false;
-      //print_status();
-      //Serial.println("Finger Released \n");
-
-  }
-
-  delay(1); // may be bad
-
-  double rotationMagnitude;
-  // rotation about Y axis
-  if (detectRotation(ypr, WOBBLE_THRESHOLD, 1,0 )) {
-      //Serial.println("Y-Axis Rotation Detected");
-      rotationMagnitude = calculateRotationMagnitude(ypr,1,0);
-      //Serial.println(magnitude);
-  }
-  // rotation about X-Axis
-  if (detectRotation(ypr, WOBBLE_THRESHOLD, 0,0 )) {
-      //Serial.println("X-Axis Rotation Detected");
-      rotationMagnitude = calculateRotationMagnitude(ypr,0,0);
-      //Serial.println(magnitude);
-  }
-  // rotation about Z-Axis
-  if (detectRotation(ypr, WOBBLE_THRESHOLD, 2,0 )) {
-      //Serial.println("Z-Axis Rotation Detected");
-      rotationMagnitude = calculateRotationMagnitude(ypr,2,0);
-      //Serial.println(magnitude);
-  }
+  clearTimerEffects();
 }
