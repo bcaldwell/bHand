@@ -6,22 +6,15 @@
 #include "var.h"
 
 #include "MPU6050_6Axis_MotionApps20.h"
-//#include "MPU6050.h" // not necessary if using MotionApps include file
 
-// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
-// is used in I2Cdev.h
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
 #include "Wire.h"
 #endif
 
-// class default I2C address is 0x68
-// specific I2C addresses may be passed as a parameter here
-// AD0 low = 0x68 (default for SparkFun breakout and InvenSense evaluation board)
-// AD0 high = 0x69
 MPU6050 mpu;
 //MPU6050 mpu_2(0x69); // <-- use for AD0 high
 
-#define INTERRUPT_PIN 7  // use pin 2 on Arduino Uno & most boards
+#define INTERRUPT_PIN 7
 
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
@@ -59,20 +52,7 @@ int velocity = 50; // Defines the velocity that the note plays at (values from 0
 int32_t current_note [2];
 int current_note_spot = 0;
 
-struct YawPitchRoll ypr;
 struct Acceleration accel;
-struct TrapezoidRule velocity_z;
-struct TrapezoidRule position_z;
-
-struct TrapezoidRule velocity_x;
-struct TrapezoidRule position_x;
-
-struct TrapezoidRule velocity_y;
-struct TrapezoidRule position_y;
-
-// ================================================================
-// ===                      INITIAL SETUP                       ===
-// ================================================================
 
 void setup() {
   mpu_init(mpu, INTERRUPT_PIN);
@@ -82,25 +62,11 @@ void setup() {
   // first data points are incorrect and need to clear buffer
   while (millis() < 6500) {
     mpu_setup();
-    getYawPitchRoll(&ypr);
     getLinearAccel(&accel);
   }
   Serial.println("Done");
-
-  velocity_z = {0,0,millis(), GRAVITY_FACTOR};
-  position_z  = {0,0,millis(), 0};
-
-  velocity_y = {0,0,millis(), OUT_FACTOR};
-  position_y  = {0,0,millis(), 0};
-
-  velocity_x = {0,0,millis(), HORIZONTAL_FACTOR};
-  position_x  = {0,0,millis(), 0};
 }
 
-
-// ================================================================
-// ===                    MAIN PROGRAM LOOP                     ===
-// ================================================================
 int accelSpot = 0;
 void printArray (double array []) {
   Serial.println("Print Array");
@@ -185,15 +151,9 @@ void loop() {
 
   if(!mpu_setup()) return;
 
-  //getYawPitchRoll(&ypr);
-  //printYawPitchRoll(ypr);
-
   getLinearAccel(&accel);
 
   addAccel(accel.x, accel.y, accel.z);
-  //getWorldAccel(&accel); // want to try with WorldAccel
-  // printAccel(accel);
-
 
   if (cap_turned_on(SIDE_FINGER)) clearTouchEffect();
 
@@ -201,7 +161,6 @@ void loop() {
 
 
   if (any_cap_turned_on(&active_finger)) {
-      //print_status();
       tryFindAction = true;
       Serial.printf("Reseting Position %d\n\n", active_finger);
       clearArray(AZ_HIST);

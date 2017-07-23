@@ -1,9 +1,6 @@
 #ifndef VAR
 #define VAR
 
-// #define DEBUG 1
-
-
 const int HISTORY_LENGTH = 20;
 
 const double AZ_THRESHOLD_UP = 40;
@@ -61,7 +58,6 @@ struct MidiControl {
   int control_change;
   int on;
   int off;
-  // int length;
 
   bool is_on;
 
