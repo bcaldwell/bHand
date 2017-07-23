@@ -1,8 +1,6 @@
 /*
    MPU6050.h : class header for MPU6050 library for Teensy 3.X and Teensy LC
-
    This file is part of MPU6050.
-
    MPU6050 is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
@@ -49,6 +47,8 @@ class MPU6050 {
         int begin(mpu_accel_range arange, mpu_gyro_range grange);
 
         bool getMotion6Counts(int16_t * ax, int16_t * ay, int16_t * az, int16_t * gx, int16_t * gy, int16_t * gz);
+        uint8_t getAddress();
+        bool setAddress(uint8_t address);
 
     private:
 
