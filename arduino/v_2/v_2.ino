@@ -26,12 +26,12 @@ MPU6050 mpu;
 // packet structure for InvenSense teapot demo
 uint8_t teapotPacket[14] = { '$', 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0x00, 0x00, '\r', '\n' };
 
-const int INDEX_FINGER = 0;
-const int MIDDLE_FINGER = 1;
-const int RING_FINGER = 2;
-const int PINKY_FINGER = 3;
+const int INDEX_FINGER = 2;
+const int MIDDLE_FINGER = 3;
+const int RING_FINGER = 4;
+const int PINKY_FINGER = 5;
 
-const int SIDE_FINGER = 4;
+const int SIDE_FINGER = 6;
 
 const int WOBBLE_THRESHOLD = 35;
 const int WOBBLE_COUNT = 50;
@@ -85,8 +85,8 @@ void setup() {
     getYawPitchRoll(&ypr);
     getLinearAccel(&accel);
   }
-
   Serial.println("Done");
+
   velocity_z = {0,0,millis(), GRAVITY_FACTOR};
   position_z  = {0,0,millis(), 0};
 
@@ -158,7 +158,7 @@ bool any_cap_turned_on(int *finger) {
     return true;
   }
   if (cap_turned_on(MIDDLE_FINGER)) {
-    *finger = INDEX_FINGER;
+    *finger = MIDDLE_FINGER;
     return true;
   }
   if (cap_turned_on(RING_FINGER)) {
@@ -169,6 +169,8 @@ bool any_cap_turned_on(int *finger) {
     *finger = PINKY_FINGER;
     return true;
   }
+
+  return false;
 }
 
 bool any_cap_turned_off(){
@@ -192,10 +194,16 @@ void loop() {
   //getWorldAccel(&accel); // want to try with WorldAccel
   // printAccel(accel);
 
+
+  if (cap_turned_on(SIDE_FINGER)) clearTouchEffect();
+
+  clearTimerEffects();
+
+
   if (any_cap_turned_on(&active_finger)) {
       //print_status();
       tryFindAction = true;
-      Serial.println("Reseting Position\n");
+      Serial.printf("Reseting Position %d\n\n", active_finger);
       clearArray(AZ_HIST);
       clearArray(AX_HIST);
   }
@@ -226,8 +234,4 @@ void loop() {
     printAccel(accel);
     turnOnEffect(active_finger, 3);
   }
-
-  if (cap_turned_on(SIDE_FINGER)) clearTouchEffect();
-
-  clearTimerEffects();
 }

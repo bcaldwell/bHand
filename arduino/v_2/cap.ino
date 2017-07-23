@@ -14,7 +14,7 @@ void cap_init(){
   } else {
     Serial.println("MPR121 connection succesful");
   }
-  cap.setThreshholds(3,2);
+//  cap.setThreshholds(3,2);
 }
 
 uint16_t cap_read() {
@@ -23,7 +23,7 @@ uint16_t cap_read() {
   return currtouched;
 }
 
-void print_status() {
+void cap_print_status() {
   Serial.printf("Current Touched: %d  \t Last Touched %d \n", currtouched, lasttouched);
 }
 

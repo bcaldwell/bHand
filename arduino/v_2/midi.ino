@@ -24,12 +24,15 @@ MidiControl currentTimer;
 MidiControl currentTouch;
 
 void turnOnEffect (int finger, int direction) {
-  currentEffect = Mapping[finger][direction];
-  if (finger == INDEX_FINGER || finger == MIDDLE_FINGER) {
-    TurnOnTimerEffect(&currentEffect);
-  } else {
-    TurnOnTouchEffect(currentEffect);
-  }
+  // index is wired to 2 but mapped to 0
+
+  currentEffect = Mapping[finger - 2][direction];
+
+  // if (finger == INDEX_FINGER || finger == MIDDLE_FINGER) {
+  TurnOnTimerEffect(&currentEffect);
+  // } else {
+    // TurnOnTouchEffect(currentEffect);
+  // }
 }
 
 void TurnOnTimerEffect(MidiControl * effect) {
@@ -46,11 +49,11 @@ void TurnOnTouchEffect(MidiControl effect) {
 void toggleEffect(MidiControl * effect) {
   int value;
   if (effect -> is_on) {
-    value = effect -> on;
-    effect -> is_on = true;
-  } else {
     value = effect -> off;
     effect -> is_on = false;
+  } else {
+    value = effect -> on;
+    effect -> is_on = true;
   }
 
   usbMIDI.sendControlChange(effect -> control_change,value,effect -> channel);
@@ -66,7 +69,7 @@ void clearTimerEffects() {
   unsigned long cur_time = millis();
   while (!TimerQueue.isEmpty()) {
     currentTimer = TimerQueue.front();
-    if (currentTimer.off_time < cur_time) break;
+    if (currentTimer.off_time > cur_time) return;
     toggleEffect(&currentTimer);
     TimerQueue.dequeue();
   }
